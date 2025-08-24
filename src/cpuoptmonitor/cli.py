@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.progress_bar import ProgressBar as Bar
 from rich.text import Text
 
-from cpuoptmonitor.mock_data import MockDataProvider
+from cpuoptmonitor.profiler import RealTimeProfiler
 
 console = Console()
 
@@ -23,31 +23,38 @@ def generate_layout(data: dict) -> Layout:
     layout["header"].update(header_text)
     layout["main"].split_row(Layout(name="left"), Layout(name="right", ratio=2))
 
+    # Left panel with metrics
     metrics_table = Table.grid(expand=True)
     metrics_table.add_column(style="cyan")
     metrics_table.add_column(justify="right", style="green")
-    metrics_table.add_row("Task:", f"[bold]{data['task']}[/bold]")
-    metrics_table.add_row("Core Usage:", f"{data['core_usage']:.1f}%")
-    metrics_table.add_row("Memory BW:", f"{data['memory_bw']:.1f} GB/s")
-    metrics_table.add_row("IPC:", f"{data['ipc']:.2f}")
-    metrics_table.add_row("Cache Hit L1:", f"{data['cache_hit_l1']:.1f}%")
-    metrics_table.add_row("Cache Hit L2:", f"{data['cache_hit_l2']:.1f}%")
-    metrics_table.add_row("Cache Hit L3:", f"{data['cache_hit_l3']:.1f}%")
-    metrics_table.add_row("Power:", f"{data['power_consumption']:.1f}W")
-    metrics_table.add_row("Efficiency:", f"{data['gflops_per_watt']:.1f} GFLOPS/Watt")
+
+    total_usage = data.get('total_usage', 0.0)
+    metrics_table.add_row("Total CPU Usage:", f"{total_usage:.1f}%")
+
+    # Placeholder for future metrics
+    metrics_table.add_row("Task:", "[yellow]N/A[/yellow]")
+    metrics_table.add_row("Power:", "[yellow]N/A[/yellow]")
+    metrics_table.add_row("Efficiency:", "[yellow]N/A[/yellow]")
+
     layout["left"].update(Panel(metrics_table, title="Live Metrics", border_style="blue"))
 
+    # Right panel with optimizations and per-core usage
     right_layout = Layout()
     right_layout.split(Layout(name="optimizations"), Layout(name="core_usage"))
-    opts_text = "\n".join(f"- {opt}" for opt in data['active_optimizations'])
+
+    # This will be used in the next step for the adaptive algorithm
+    opts_text = data.get("optimizations_text", "Normal Mode")
     right_layout["optimizations"].update(
         Panel(opts_text, title="Active Optimizations", border_style="blue")
     )
+
     core_bars = Table.grid(expand=True)
     core_bars.add_column(style="yellow")
     core_bars.add_column(ratio=1)
-    for i, usage in enumerate(data['per_core_usage']):
+    per_core_usage = data.get('per_core_usage', [])
+    for i, usage in enumerate(per_core_usage):
         core_bars.add_row(f"Core {i}", Bar(total=100, completed=usage, style="yellow", complete_style="yellow"))
+
     right_layout["core_usage"].update(
         Panel(core_bars, title="Per-Core Usage", border_style="blue")
     )
@@ -56,12 +63,26 @@ def generate_layout(data: dict) -> Layout:
 
 def run_dashboard():
     """Runs the live dashboard."""
-    provider = MockDataProvider()
-    with Live(generate_layout(provider.get_mock_data()), screen=True, redirect_stderr=False) as live:
+    try:
+        profiler = RealTimeProfiler()
+    except FileNotFoundError as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        return
+
+    with Live(generate_layout(profiler.get_cpu_usage()), screen=True, redirect_stderr=False) as live:
         try:
             while True:
                 time.sleep(1)
-                live.update(generate_layout(provider.get_mock_data()))
+                data = profiler.get_cpu_usage()
+
+                # Simple adaptive algorithm proof of concept
+                total_usage = data.get('total_usage', 0.0)
+                if total_usage > 50.0:
+                    data['optimizations_text'] = "[bold red]High-Performance Mode: ON[/bold red]"
+                else:
+                    data['optimizations_text'] = "[bold green]Normal Mode: ON[/bold green]"
+
+                live.update(generate_layout(data))
         except KeyboardInterrupt:
             pass
 
