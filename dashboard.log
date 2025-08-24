@@ -1,5 +1,0 @@
-Usage: python -m cpuoptmonitor.cli [OPTIONS]
-Try 'python -m cpuoptmonitor.cli --help' for help.
-╭─ Error ──────────────────────────────────────────────────────────────────────╮
-│ Got unexpected extra argument (start)                                        │
-╰──────────────────────────────────────────────────────────────────────────────╯
