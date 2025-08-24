@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak
+venv.bak
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.tox/
+
+# C++ / CMake
+build/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+*.so
+*.a
+*.out
+
+# IDE / Editor specific
+.vscode/
+.idea/
+*.swp
+*.swo
