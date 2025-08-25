@@ -3,6 +3,9 @@ import time
 import subprocess
 import os
 import numpy as np
+import threading
+import queue
+from collections import deque
 
 from rich.live import Live
 from rich.panel import Panel
@@ -20,12 +23,26 @@ from .sample_spmv import create_sparse_matrix, spmv_coo_py
 
 console = Console()
 
+# --- Threaded Reader for Subprocess Output ---
+def _reader_thread(stream, q):
+    """Reads lines from a stream and puts them into a queue."""
+    try:
+        for line in iter(stream.readline, b''):
+            q.put(line.decode('utf-8').strip())
+    except Exception as e:
+        # This can happen if the stream is closed abruptly
+        pass
+    finally:
+        stream.close()
+
+
 def generate_layout(data: dict) -> Layout:
     """Generates the layout for the dashboard."""
     layout = Layout()
     layout.split(
         Layout(name="header", size=3),
         Layout(ratio=1, name="main"),
+        Layout(name="footer", size=8) # New panel for output
     )
     header_text = Text(data.get("title", "APU"), justify="center", style="bold magenta")
     layout["header"].update(header_text)
@@ -61,6 +78,12 @@ def generate_layout(data: dict) -> Layout:
         Panel(core_bars, title="Per-Core Usage", border_style="blue")
     )
     layout["right"].update(right_layout)
+
+    # --- Footer for Task Output ---
+    output_lines = data.get("output_lines", [])
+    output_text = "\n".join(output_lines)
+    layout["footer"].update(Panel(output_text, title="Task Output", border_style="green"))
+
     return layout
 
 def run_supervised_task(command_args):
@@ -76,28 +99,51 @@ def run_supervised_task(command_args):
         return
 
     try:
-        process = subprocess.Popen(command_args)
+        process = subprocess.Popen(
+            command_args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True, # Decode output as text
+            bufsize=1 # Line-buffered
+        )
         console.print(f"🚀 Started process [bold cyan]{process.pid}[/bold cyan] for command: `{' '.join(command_args)}`")
     except FileNotFoundError:
         console.print(f"[bold red]Error:[/bold red] Command not found: '{command_args[0]}'")
         return
     except Exception as e:
-        console.print(f"[bold red]An unexpected error occurred during process launch:[/bold red] {e}")
+        console.print(f"[bold red]An unexpected error during process launch:[/bold red] {e}")
         return
+
+    # --- Setup for threaded output reading ---
+    output_q = queue.Queue()
+    output_lines = deque(maxlen=10) # Store last 10 lines of output
+
+    # Start threads to read stdout and stderr
+    stdout_thread = threading.Thread(target=_reader_thread, args=(process.stdout, output_q))
+    stderr_thread = threading.Thread(target=_reader_thread, args=(process.stderr, output_q))
+    stdout_thread.start()
+    stderr_thread.start()
 
     data = bridge.get_cpu_usage()
     data['title'] = "APU: Supervising External Task"
     data['pid'] = process.pid
     data['optimizations_text'] = "[bold green]Normal Mode[/bold green]"
+    data['output_lines'] = list(output_lines)
     high_perf_mode_active = False
 
-    with Live(generate_layout(data), screen=True, redirect_stderr=False) as live:
+    with Live(generate_layout(data), screen=True, redirect_stderr=False, auto_refresh=False) as live:
         try:
             while process.poll() is None:
                 time.sleep(1)
+
+                # Drain the queue of any new output
+                while not output_q.empty():
+                    output_lines.append(output_q.get_nowait())
+
                 data = bridge.get_cpu_usage()
                 data['title'] = "APU: Supervising External Task"
                 data['pid'] = process.pid
+                data['output_lines'] = list(output_lines)
 
                 total_usage = data.get('total_usage', 0.0)
 
@@ -114,15 +160,21 @@ def run_supervised_task(command_args):
                     data['optimizations_text'] = "[bold green]Normal Mode[/bold green]"
 
                 live.update(generate_layout(data))
+                live.refresh()
+
         except KeyboardInterrupt:
             console.print("\n[yellow]Interrupted by user. Terminating process...[/yellow]")
             process.terminate()
-            process.wait()
         finally:
+            # Clean up threads
+            stdout_thread.join()
+            stderr_thread.join()
+            # Ensure optimizations are reset on exit
             if high_perf_mode_active:
                 optimizer.apply_normal_mode(process.pid)
 
     console.print(f"\n✅ Process [bold cyan]{process.pid}[/bold cyan] finished.")
+
 
 def run_spmv_demo():
     """Runs the SpMV demo, showcasing adaptive kernel switching."""
