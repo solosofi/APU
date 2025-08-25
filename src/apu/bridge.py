@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 
 # Define the path to the shared library.
-LIB_PATH = Path(__file__).parent.parent.parent / "src" / "core" / "build" / "libcore.so"
+# Using an absolute path to be robust in this environment.
+LIB_PATH = Path("/app/src/core/build/libcore.so")
 
 class CoreBridge:
     """
