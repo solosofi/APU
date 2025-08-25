@@ -4,9 +4,23 @@ import os
 from pathlib import Path
 import numpy as np
 
-# Define the path to the shared library.
-# Using an absolute path to be robust in this environment.
-LIB_PATH = Path("/app/src/core/build/libcore.so")
+def find_project_root(marker='pyproject.toml'):
+    """Finds the project root directory by searching upwards for a marker file."""
+    path = Path(__file__).resolve()
+    while path.parent != path:
+        if (path / marker).exists():
+            return path
+        path = path.parent
+    raise FileNotFoundError(f"Could not find project root with marker {marker}")
+
+# Define the path to the shared library dynamically.
+try:
+    PROJECT_ROOT = find_project_root()
+    LIB_PATH = PROJECT_ROOT / "src" / "core" / "build" / "libcore.so"
+except FileNotFoundError as e:
+    # Fallback for when the script is run in a weird way, though it might not work.
+    LIB_PATH = Path("src/core/build/libcore.so")
+
 
 class CoreBridge:
     """
@@ -14,7 +28,7 @@ class CoreBridge:
     """
     def __init__(self):
         if not LIB_PATH.exists():
-            raise FileNotFoundError(f"Shared library not found at {LIB_PATH}. Please compile the C++ core first.")
+            raise FileNotFoundError(f"Shared library not found at {LIB_PATH}. Please build the C++ core first by running `make -C src/core/build` from the project root.")
 
         self._lib = ctypes.CDLL(str(LIB_PATH))
 
