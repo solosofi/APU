@@ -1,6 +1,6 @@
-# CpuOptMonitor
+# APU: Adaptive Runtime Optimizer
 
-CpuOptMonitor integrates an adaptive runtime optimization system to wrap the entire CPU in a feedback-driven optimization framework. This system dynamically applies sophisticated algorithms for tensor algebra, sparse matrix operations, and high-dimensional data handling, adapting in real-time to maximize compute-to-memory efficiency on general-purpose CPUs.
+APU is an adaptive runtime optimization system that wraps your commands in a feedback-driven optimization framework. It monitors system performance in real-time and dynamically applies OS-level optimizations to your running processes to improve performance.
 
 ## How to Run
 
@@ -31,18 +31,25 @@ This will create a `libcore.so` file in the `src/core/build` directory.
 
 ### 2. Install Python Dependencies and the Application
 
-From the **root** of the project directory, run the following command to install the Python dependencies and the `cpuoptmonitor` application in editable mode.
+From the **root** of the project directory, run the following command to install the Python dependencies and the `apu` application in editable mode.
 
 ```bash
 pip install -e .
 ```
 
-### 3. Run the Dashboard
+### 3. Run a Command with APU
 
-Once the C++ core is built and the Python package is installed, you can run the dashboard.
+Once the C++ core is built and the Python package is installed, you can use `apu` to run and optimize any command.
+
+The main command is `apu run`. It will launch your command, monitor system performance, and apply optimizations automatically.
+
+**Example:**
+
+To run a simple command like `stress` (you may need to install it: `sudo apt-get install stress`) and watch APU work, use:
 
 ```bash
-cpuoptmonitor start
+# This will run a process that uses 1 CPU core at 100%
+apu run stress -c 1
 ```
 
-The terminal will clear and display the live monitoring dashboard. Press `Ctrl+C` to exit.
+While this is running, the APU dashboard will show you the live CPU usage and which optimization mode is active. Press `Ctrl+C` to exit.
