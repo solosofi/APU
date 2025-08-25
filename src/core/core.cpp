@@ -108,4 +108,23 @@ extern "C" {
         json_result = json_ss.str();
         return json_result.c_str();
     }
+
+    // High-performance C++ kernel for Sparse Matrix-Vector multiplication (SpMV)
+    // using the Compressed Sparse Row (CSR) format.
+    void spmv_csr_cpp(
+        const double* data,     // Array of non-zero matrix values
+        const int* indices,     // Column indices for each non-zero value
+        const int* indptr,      // "Index pointer" array
+        const double* vector,   // The vector to multiply with
+        double* result,         // Output array to store the result
+        int num_rows            // Number of rows in the matrix
+    ) {
+        for (int i = 0; i < num_rows; ++i) {
+            double sum = 0.0;
+            for (int j = indptr[i]; j < indptr[i+1]; ++j) {
+                sum += data[j] * vector[indices[j]];
+            }
+            result[i] = sum;
+        }
+    }
 }

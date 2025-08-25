@@ -1,5 +1,6 @@
 import os
 import shutil
+import numpy as np
 
 console = None
 try:
@@ -15,19 +16,16 @@ def _log(message):
     else:
         print(f"[Optimizer] {message}")
 
+# --- OS-Level Optimizations ---
+
 def get_core_count():
     """Returns the number of available CPU cores."""
     return os.cpu_count() or 1
 
 def apply_high_performance_mode(pid: int):
-    """
-    Applies high-performance optimizations to a process.
-    - Sets CPU affinity to the first half of cores.
-    - Sets a higher priority (lower nice value).
-    """
-    _log(f"Applying high-performance optimizations to PID {pid}...")
+    """Applies CPU affinity optimization."""
+    _log(f"Applying CPU affinity to PID {pid}...")
     core_count = get_core_count()
-    # Pin to the first half of cores
     high_perf_cores = list(range(core_count // 2))
     if not high_perf_cores:
         high_perf_cores = [0]
@@ -38,27 +36,9 @@ def apply_high_performance_mode(pid: int):
     except Exception as e:
         _log(f"[red]Failed to set CPU affinity for PID {pid}: {e}[/red]")
 
-    try:
-        # Lower nice value = higher priority. -20 is highest, 19 is lowest.
-        # We need root privileges for negative nice values, so we'll use a small positive one for now.
-        # A nice value of 0 is a good default. Let's try to set it to -5 if possible.
-        # For a non-root user, we can only increase the nice value (lower priority).
-        # Let's just demonstrate by setting it to 5.
-        os.nice(5) # This sets it for the current process, which is APU.
-        # To set for another process, we need to use setpriority.
-        # os.setpriority(os.PRIO_PROCESS, pid, -5) # Requires root
-        _log(f"Priority adjustments for PID {pid} are complex and may require root. Skipping for now.")
-
-    except Exception as e:
-        _log(f"[red]Failed to set priority for PID {pid}: {e}[/red]")
-
-
 def apply_normal_mode(pid: int):
-    """
-    Resets optimizations, letting the OS manage the process normally.
-    - Resets CPU affinity to all available cores.
-    """
-    _log(f"Resetting optimizations for PID {pid} to normal...")
+    """Resets CPU affinity."""
+    _log(f"Resetting CPU affinity for PID {pid} to normal...")
     core_count = get_core_count()
     all_cores = list(range(core_count))
 
@@ -67,3 +47,35 @@ def apply_normal_mode(pid: int):
         _log(f"Reset CPU affinity for PID {pid} to all cores.")
     except Exception as e:
         _log(f"[red]Failed to reset CPU affinity for PID {pid}: {e}[/red]")
+
+
+# --- Workload-Specific Optimizations ---
+
+def create_optimized_spmv(bridge):
+    """
+    This is a function factory. It creates and returns an optimized SpMV function
+    that is linked to the C++ core via the provided bridge.
+    """
+    _log("Creating optimized SpMV kernel function.")
+
+    def spmv_optimized(coo_matrix, vector):
+        """
+        This function performs the actual optimization:
+        1. Converts data layout from COO to CSR.
+        2. Calls the high-performance C++ kernel.
+        """
+        # 1. Convert COO to CSR
+        csr_matrix = coo_matrix.tocsr()
+
+        # Prepare arrays for C++
+        data = csr_matrix.data
+        indices = csr_matrix.indices
+        indptr = csr_matrix.indptr
+        result = np.zeros(coo_matrix.shape[0], dtype=np.float64)
+
+        # 2. Call the C++ kernel via the bridge
+        bridge.spmv_csr_cpp(data, indices, indptr, vector, result)
+
+        return result
+
+    return spmv_optimized
